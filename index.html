@@ -537,7 +537,7 @@
                 // Sucesso
                 loggedInUserId = data.user.id; // Guarda o ID do usuário para usar no 'salvar'
                 document.getElementById('login-overlay').classList.add('hidden');
-                alert("Login efetuado com sucesso!");
+               // alert("Login efetuado com sucesso!");
                 recarregarDados(); // Puxa os dados após o login
 
             } catch (error) {
@@ -594,7 +594,7 @@
                     currentRecordId = data.id; // Guarda o id para sabermos que precisamos "atualizar" (update) e não "inserir" (insert)
                     document.getElementById('total-inicial').value = data.total_inicial;
                     renderTable(data.linhas); // Passa o JSON salvo contendo as saidas/drivers para reescrever
-                    alert("Dados do turno " + currentTurno + " recarregados!");
+                  //  alert("Dados do turno " + currentTurno + " recarregados!");
                 } else {
                     // Novo dia ou turno, reseta tudo localmente
                     currentRecordId = null;
@@ -646,7 +646,7 @@
                         .update(payload)
                         .eq('id', currentRecordId);
                     if (error) throw error;
-                    if (!silencioso) alert("Dados Atualizados com Sucesso!");
+                  //  if (!silencioso) alert("Dados Atualizados com Sucesso!");
                 } else {
                     // É a primeira vez salvando neste dia/turno, faz INSERT
                     const { data, error } = await supabaseClient
