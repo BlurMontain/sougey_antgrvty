@@ -448,6 +448,13 @@
 
         // --- PASSO 9: LÓGICA DE NEGÓCIO ---
 
+        // Pega YYYY-MM-DD forçando ABSOLUTAMENTE o fuso horário do Japão (Tokyo) para todos os celulares
+        function getLocalYYYYMMDD() {
+            const formatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'Asia/Tokyo' });
+            const partes = formatter.format(new Date()).split('/'); // Retorna ["DD", "MM", "YYYY"]
+            return `${partes[2]}-${partes[1]}-${partes[0]}`; // Monta e retorna "YYYY-MM-DD"
+        }
+
         // 9.1: Motorista Local (LocalStorage)
         function setDriver() {
             const driverName = prompt("Digite o nome do Motorista para este celular:", currentDriver);
@@ -525,7 +532,7 @@
 
         // 10.3 Puxar do Supabase
         async function recarregarDados() {
-            const hoje = new Date().toISOString().split('T')[0];
+            const hoje = getLocalYYYYMMDD();
 
             try {
                 const { data, error } = await supabaseClient
@@ -563,7 +570,7 @@
 
         // 10.4 Enviar para o banco (Concorrente e delegando Matemática)
         async function salvarNoBanco(silencioso = false, indexModificado = null, totalModificado = false) {
-            const hoje = new Date().toISOString().split('T')[0];
+            const hoje = getLocalYYYYMMDD();
             const totalInicialTela = parseFloat(document.getElementById('total-inicial').value) || 0;
 
             if (currentRecordId) {
