@@ -339,7 +339,7 @@
         <!-- Total Inicial -->
         <div class="total-container">
             <span>Total Inicial:</span>
-            <input type="number" id="total-inicial" class="total-input" value="44" onblur="salvarDados(true)">
+            <input type="number" id="total-inicial" class="total-input" value="44" onblur="salvarNoBanco(true, null, true)">
         </div>
 
         <!-- Tabela -->
@@ -362,7 +362,7 @@
         <!-- Botões de Ação Inferiores -->
         <div class="bottom-actions">
             <button class="action-btn" onclick="setDriver()">SetDrv</button>
-            <button class="action-btn" onclick="salvarDados()">Salvar</button>
+            <button class="action-btn" onclick="salvarNoBanco()">Salvar</button>
             <button class="action-btn" onclick="recarregarDados()">Recarregar</button>
         </div>
 
@@ -433,9 +433,9 @@
                                id="saida-${index}" 
                                class="saida-input" 
                                value="${valorSaida}"
-                               oninput="handleSaidaInput(${index})" 
+                               oninput="stampDriver(${index})" 
                                onfocus="stampDriver(${index})"
-                               onblur="salvarDados(true)">
+                               onblur="salvarNoBanco(true, ${index})">
                     </div>
                     <div class="cell-resto" id="resto-${index}"></div>
                     <div class="cell-driver" id="driver-${index}">${valorDriver}</div>
@@ -443,8 +443,7 @@
                 tbody.appendChild(row);
             });
 
-            // Recalcula logo após desenhar para caso haja dados pré-preenchidos
-            recalcularResto();
+            // Apagado: recalcularResto() que rodava via javascript, pois agora o Supabase fará!
         }
 
         // --- PASSO 9: LÓGICA DE NEGÓCIO ---
@@ -472,48 +471,7 @@
             }
         }
 
-        // 9.3: Lidar com a digitação da Saída
-        function handleSaidaInput(index) {
-            // Garante que o motorista esteja carimbado
-            stampDriver(index);
-            // Ao digitar, recalcula todos os restos abaixo
-            recalcularResto();
-        }
-
-        // 9.4: Matemática da Coluna "Resto"
-        function recalcularResto() {
-            const totalInicialElement = document.getElementById('total-inicial');
-            let saldoAtual = parseFloat(totalInicialElement.value) || 0;
-
-            // Percorre as 10 linhas
-            for (let i = 0; i < horariosBase.length; i++) {
-                const inputSaida = document.getElementById(`saida-${i}`);
-                const valorSaida = parseFloat(inputSaida.value);
-                const celulaResto = document.getElementById(`resto-${i}`);
-
-                // Se houver valor numérico na saída, subtrai do saldo
-                if (!isNaN(valorSaida) && inputSaida.value !== "") {
-                    saldoAtual -= valorSaida;
-                    celulaResto.innerText = saldoAtual;
-                } else {
-                    // Se estiver vazio, apenas mostra o restante ou limpa
-                    celulaResto.innerText = "";
-                }
-            }
-        }
-
-        // Ouve mudanças no total inicial para recalcular a tabela inteira
-        document.getElementById('total-inicial').addEventListener('input', recalcularResto);
-
         // --- PASSO 10: INTEGRAÇÃO REAL SUPABASE ---
-
-        // No Supabase, você precisa ter uma tabela chamada: `registros_diarios`
-        // Colunas (Schema):
-        // 1. id (int8 ou uuid, primary key)
-        // 2. data (date)
-        // 3. turno (text)
-        // 4. total_inicial (numeric)
-        // 5. linhas (jsonb) -> Aqui salvaremos as 10 linhas juntas
 
         // 10.1 Login Autenticado
         async function handleLogin() {
@@ -537,21 +495,18 @@
                 // Sucesso
                 loggedInUserId = data.user.id; // Guarda o ID do usuário para usar no 'salvar'
                 document.getElementById('login-overlay').classList.add('hidden');
-               // alert("Login efetuado com sucesso!");
                 recarregarDados(); // Puxa os dados após o login
 
             } catch (error) {
-                alert("Erro ao logar: " + error.message + "\n\n(Verifique se as chaves da linha 254 estão corretas!)");
+                alert("Erro ao logar: " + error.message + "\n\n(Verifique as chaves ou usuário!)");
             }
         }
 
         // 10.2 Verificar Sessão Ativa
         async function checkSession() {
-            // Pula a checagem se não houver sessão
-
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
-                loggedInUserId = session.user.id; // Guarda o ID do usuário para usar no 'salvar'
+                loggedInUserId = session.user.id;
                 document.getElementById('login-overlay').classList.add('hidden');
                 recarregarDados();
             } else {
@@ -563,20 +518,14 @@
         async function fazerLogout() {
             await supabaseClient.auth.signOut();
             loggedInUserId = null;
-
-            // Limpa a tabela da tela
             document.getElementById('total-inicial').value = '';
             renderTable();
-
-            // Volta para a tela de Login
             document.getElementById('login-overlay').classList.remove('hidden');
         }
 
         // 10.3 Puxar do Supabase
         async function recarregarDados() {
-            // URL real já definida, buscando dados...
-
-            const hoje = new Date().toISOString().split('T')[0]; // ex: "2024-04-01"
+            const hoje = new Date().toISOString().split('T')[0];
 
             try {
                 const { data, error } = await supabaseClient
@@ -584,19 +533,24 @@
                     .select('*')
                     .eq('data', hoje)
                     .eq('turno', currentTurno)
-                    .single(); // Espera apenas 1 registro para este dia/turno
+                    .single();
 
-                if (error && error.code !== 'PGRST116') { // Ignora erro se não encontrou nada (PGRST116)
+                if (error && error.code !== 'PGRST116') {
                     throw error;
                 }
 
                 if (data) {
-                    currentRecordId = data.id; // Guarda o id para sabermos que precisamos "atualizar" (update) e não "inserir" (insert)
+                    currentRecordId = data.id;
                     document.getElementById('total-inicial').value = data.total_inicial;
-                    renderTable(data.linhas); // Passa o JSON salvo contendo as saidas/drivers para reescrever
-                  //  alert("Dados do turno " + currentTurno + " recarregados!");
+                    
+                    // Atualiza a tela suavemente se ja existir ou forca re-render
+                    if (document.getElementById('table-body').innerHTML === '') {
+                        renderTable(data.linhas); 
+                    } else {
+                        atualizarTabelaUI(data.linhas);
+                    }
+                    // alert("Dados do turno " + currentTurno + " recarregados!"); // Silenciado para n incomodar.
                 } else {
-                    // Novo dia ou turno, reseta tudo localmente
                     currentRecordId = null;
                     document.getElementById('total-inicial').value = '';
                     renderTable();
@@ -604,66 +558,105 @@
 
             } catch (error) {
                 console.error("Erro ao puxar dados: ", error);
-                alert("Erro ao recarregar dados.");
             }
         }
 
-        // 10.4 Enviar para o banco (Pode ser silencioso se acionado automaticamente)
-        async function salvarDados(silencioso = false) {
-            // Prossegue com salvamento
-
-            const totalInicial = document.getElementById('total-inicial').value;
+        // 10.4 Enviar para o banco (Concorrente e delegando Matemática)
+        async function salvarNoBanco(silencioso = false, indexModificado = null, totalModificado = false) {
             const hoje = new Date().toISOString().split('T')[0];
+            const totalInicialTela = parseFloat(document.getElementById('total-inicial').value) || 0;
 
-            // Montar objeto das 10 linhas
-            const linhas = [];
-            for (let i = 0; i < horariosBase.length; i++) {
-                const saida = document.getElementById(`saida-${i}`).value;
-                const driver = document.getElementById(`driver-${i}`).innerText;
-                const resto = document.getElementById(`resto-${i}`).innerText;
+            if (currentRecordId) {
+                // MODO UPDATE CONCORRENTE: Puxar do banco instantes antes de atualizar!
+                const { data: db } = await supabaseClient.from('registros_diarios').select('*').eq('id', currentRecordId).single();
+                
+                let payload = {};
+                let atualizou = false;
 
-                linhas.push({
-                    horario: horariosBase[i],
-                    saida: saida ? parseFloat(saida) : null,
-                    resto: resto ? parseFloat(resto) : null,
-                    driver: driver
-                });
-            }
-
-            const payload = {
-                data: hoje,
-                turno: currentTurno,
-                total_inicial: parseFloat(totalInicial) || 0,
-                linhas: linhas,
-                user_id: loggedInUserId // Incluído para bater com a sua nova coluna 'user_id'
-            };
-
-            try {
-                if (currentRecordId) {
-                    // Já existe no banco hoje, faz um UPDATE
-                    const { error } = await supabaseClient
-                        .from('registros_diarios')
-                        .update(payload)
-                        .eq('id', currentRecordId);
-                    if (error) throw error;
-                  //  if (!silencioso) alert("Dados Atualizados com Sucesso!");
-                } else {
-                    // É a primeira vez salvando neste dia/turno, faz INSERT
-                    const { data, error } = await supabaseClient
-                        .from('registros_diarios')
-                        .insert([payload])
-                        .select(); // Retorna o que foi inserido
-                    if (error) throw error;
-
-                    if (data && data.length > 0) {
-                        currentRecordId = data[0].id; // Salva o novo ID
-                    }
-                    if (!silencioso) alert("Novos Dados Inseridos com Sucesso!");
+                if (indexModificado !== null && db) {
+                    let linhasDoBanco = db.linhas;
+                    const saidaStr = document.getElementById(`saida-${indexModificado}`).value;
+                    const driverStr = document.getElementById(`driver-${indexModificado}`).innerText;
+                    
+                    linhasDoBanco[indexModificado].saida = saidaStr !== "" ? parseFloat(saidaStr) : null;
+                    linhasDoBanco[indexModificado].driver = driverStr;
+                    payload.linhas = linhasDoBanco;
+                    atualizou = true;
+                }
+                
+                if (totalModificado) {
+                    payload.total_inicial = totalInicialTela;
+                    atualizou = true;
                 }
 
-            } catch (error) {
-                console.error("Erro ao salvar: ", error);
-                if (!silencioso) alert("Erro ao salvar no banco. Verifique o console.");
+                // Se clicou no botão "Salvar" geral, mescla a tela inteira (somente o que tá preenchido):
+                if (!atualizou) {
+                    let linhasDoBanco = db ? db.linhas : [];
+                    for (let i = 0; i < horariosBase.length; i++) {
+                        const s = document.getElementById(`saida-${i}`).value;
+                        const d = document.getElementById(`driver-${i}`).innerText;
+                        
+                        if (!linhasDoBanco[i]) linhasDoBanco[i] = { horario: horariosBase[i], resto: null };
+                        linhasDoBanco[i].saida = s !== "" ? parseFloat(s) : linhasDoBanco[i].saida;
+                        linhasDoBanco[i].driver = d !== "" ? d : linhasDoBanco[i].driver;
+                    }
+                    payload.linhas = linhasDoBanco;
+                    payload.total_inicial = totalInicialTela;
+                }
+
+                const { data, error } = await supabaseClient.from('registros_diarios').update(payload).eq('id', currentRecordId).select();
+                if (error) { if(!silencioso) alert("Erro! " + error.message); return; }
+                if (!silencioso) alert("Dados Atualizados no Banco!");
+                
+                // Estampa de volta os Restos calculados pela Função do Supabase!
+                if (data) atualizarTabelaUI(data[0].linhas);
+
+            } else {
+                // INSERT MODO (Criando o dia)
+                const linhas = [];
+                for (let i = 0; i < horariosBase.length; i++) {
+                    const saida = document.getElementById(`saida-${i}`).value;
+                    const driver = document.getElementById(`driver-${i}`).innerText;
+                    linhas.push({
+                        horario: horariosBase[i],
+                        saida: saida !== "" ? parseFloat(saida) : null,
+                        resto: null,
+                        driver: driver
+                    });
+                }
+
+                const payload = {
+                    data: hoje,
+                    turno: currentTurno,
+                    total_inicial: totalInicialTela,
+                    user_id: loggedInUserId,
+                    linhas: linhas 
+                };
+
+                const { data, error } = await supabaseClient.from('registros_diarios').insert([payload]).select();
+                if (error) { if(!silencioso) alert("Erro! " + error.message); return; }
+                
+                if(data && data.length > 0) {
+                    currentRecordId = data[0].id; 
+                    atualizarTabelaUI(data[0].linhas);
+                }
+                if (!silencioso) alert("Novo Dia Iniciado!");
+            }
+        }
+
+        // 10.5 Função silenciosa para não piscar a interface perdendo o Foco da digitação!
+        function atualizarTabelaUI(matrizBD) {
+            for(let i = 0; i < matrizBD.length; i++) {
+                const elSaida = document.getElementById(`saida-${i}`);
+                const elResto = document.getElementById(`resto-${i}`);
+                const elDriver = document.getElementById(`driver-${i}`);
+                
+                if (document.activeElement !== elSaida) {
+                     elSaida.value = matrizBD[i].saida !== null ? matrizBD[i].saida : '';
+                }
+                
+                elResto.innerText = matrizBD[i].resto !== null ? matrizBD[i].resto : '';
+                elDriver.innerText = matrizBD[i].driver || '';
             }
         }
 
